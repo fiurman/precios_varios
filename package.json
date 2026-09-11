@@ -1,0 +1,19 @@
+{
+  "name": "precios-varios",
+  "version": "0.0.0",
+  "private": true,
+  "description": "App mobile para comparar precios y trackear el gasto del changuito",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f db",
+    "db:psql": "docker compose exec db psql -U precios -d precios"
+  }
+}
