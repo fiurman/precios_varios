@@ -2,10 +2,14 @@ import { pool } from '@precios/db';
 import { CooperativaAdapter } from './adapters/cooperativa.js';
 import { ensureStore, startRun, finishRun, persistProduct } from './persist.js';
 
-const limit = Number(process.argv[2] ?? 20);
+// `npm run scrape -- todo` baja el catalogo entero (~6.100 articulos).
+const arg = process.argv[2] ?? '20';
+const limit = arg === 'todo' || arg === 'all' ? Number.POSITIVE_INFINITY : Number(arg);
 const adapter = new CooperativaAdapter();
 
-console.log(`Scrapeando ${adapter.displayName} (limite: ${limit} productos)\n`);
+console.log(
+  `Scrapeando ${adapter.displayName} (limite: ${limit === Infinity ? 'catalogo completo' : limit})\n`,
+);
 
 const storeId = await ensureStore(adapter.chain, adapter.displayName);
 const runId = await startRun(adapter.chain);
