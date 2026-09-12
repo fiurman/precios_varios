@@ -14,6 +14,10 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f db",
-    "db:psql": "docker compose exec db psql -U precios -d precios"
+    "db:psql": "docker compose exec db psql -U precios -d precios",
+    "scrape": "npm run scrape -w @precios/scraper --",
+    "inspect": "npm run inspect -w @precios/scraper --",
+    "studio": "npm run studio -w @precios/db",
+    "db:reset": "docker compose exec -T db psql -U precios -d precios -c \"TRUNCATE products, categories, stores, prices, current_prices, product_sources, raw_scrape_items, scrape_runs RESTART IDENTITY CASCADE;\""
   }
 }
