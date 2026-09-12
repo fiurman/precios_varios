@@ -22,14 +22,17 @@ export function parsePriceToCents(raw: string | number | null | undefined): numb
 const UNIT_MAP: Record<string, string> = {
   gr: 'g', grs: 'g', gramo: 'g', gramos: 'g', g: 'g',
   kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg',
-  ml: 'ml', cc: 'ml',
+  // La Coope expresa TODO el volumen en cm3: sin esta linea, sus casi 5.000
+  // productos liquidos quedan sin unidad y no comparan contra ningun ml.
+  ml: 'ml', cc: 'ml', cm3: 'ml', cmc: 'ml',
   l: 'l', lt: 'l', lts: 'l', litro: 'l', litros: 'l',
   un: 'un', uni: 'un', unid: 'un', unidad: 'un', unidades: 'un',
 };
 
 export function normalizeUnit(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  return UNIT_MAP[toNormalizedName(raw)] ?? null;
+  // Sacar la puntuacion: La Coope manda "ml." con punto en 61 articulos.
+  return UNIT_MAP[toNormalizedName(raw).replace(/[^a-z0-9]/g, '')] ?? null;
 }
 
 /** Valida el digito verificador de un EAN-13. La Coope no publica codigos de
@@ -83,7 +86,7 @@ export function toCoopeUrlSlug(name: string): string {
  *  Si aparecen varias medidas nos quedamos con la de peso o volumen antes que
  *  con el conteo: en "30 Mts x 4 Un" el 4 son unidades, pero en "Yogur 120g x
  *  4" lo que importa para comparar es el gramaje. */
-const RE_CONTENIDO = /(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|grs?|gramos?|g|mls?|cc|lts?|litros?|l|unid(?:ad(?:es)?)?|un)\b/gi;
+const RE_CONTENIDO = /(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|grs?|gramos?|g|mls?|cm3|cc|lts?|litros?|l|unid(?:ad(?:es)?)?|un)\b/gi;
 const UNIDADES_DE_MEDIDA = new Set(['g', 'kg', 'ml', 'l']);
 
 export function parseContentFromName(
@@ -101,4 +104,54 @@ export function parseContentFromName(
   return (
     encontrados.find((c) => UNIDADES_DE_MEDIDA.has(c.unit)) ?? encontrados[0] ?? null
   );
+}
+
+/** Palabras que aparecen en casi todos los nombres y no distinguen nada. */
+const RUIDO = new Set([
+  'con', 'sin', 'para', 'por', 'del', 'los', 'las', 'sabor', 'tipo', 'pack',
+  'grs', 'gramos', 'kgs', 'kilo', 'kilos', 'lts', 'litro', 'litros', 'cm3',
+  'und', 'unidad', 'unidades',
+]);
+
+/** Tokens del nombre que efectivamente distinguen un producto de otro.
+ *
+ *  Saca marca, numeros, unidades y muletillas. Lo que queda es el sabor, la
+ *  variante y el formato, que es justo donde se juega si dos fichas son el
+ *  mismo producto: "actimel citrus" y "actimel frutilla" comparten casi todas
+ *  las letras, y por eso la similitud trigram las confunde, pero no comparten
+ *  el token que importa. */
+export function nameTokens(name: string, brand?: string | null): Set<string> {
+  const marca = new Set(
+    brand ? toNormalizedName(brand).split(/[^a-z0-9]+/).filter(Boolean) : [],
+  );
+
+  const out = new Set<string>();
+  for (const t of toNormalizedName(name).split(/[^a-z0-9]+/)) {
+    if (t.length < 3 || /^\d+$/.test(t) || RUIDO.has(t) || marca.has(t)) continue;
+    out.add(t);
+  }
+  return out;
+}
+
+/** Interseccion sobre union. 1 = mismos tokens, 0 = ninguno en comun. */
+export function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let comunes = 0;
+  for (const t of a) if (b.has(t)) comunes++;
+  return comunes / (a.size + b.size - comunes);
+}
+
+/** Lleva gramaje y unidad a una base comparable: kg->g, l->ml.
+ *  Sin esto "1 kg" y "1000 grs" parecen productos distintos. */
+export function contenidoBase(
+  value: number | string | null,
+  unit: string | null,
+): { valor: number; unidad: string } | null {
+  if (value === null || unit === null) return null;
+  const n = typeof value === 'number' ? value : Number.parseFloat(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+
+  if (unit === 'kg') return { valor: n * 1000, unidad: 'g' };
+  if (unit === 'l') return { valor: n * 1000, unidad: 'ml' };
+  return { valor: n, unidad: unit };
 }

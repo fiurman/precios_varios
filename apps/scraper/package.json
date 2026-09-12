@@ -6,7 +6,8 @@
   "scripts": {
     "scrape": "tsx src/run.ts",
     "typecheck": "tsc --noEmit",
-    "inspect": "tsx src/inspect.ts"
+    "inspect": "tsx src/inspect.ts",
+    "match": "tsx src/match.ts"
   },
   "dependencies": {
     "@precios/db": "*"
