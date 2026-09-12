@@ -1,11 +1,24 @@
 import { pool } from '@precios/db';
+import type { ChainAdapter } from './adapters/types.js';
 import { CooperativaAdapter } from './adapters/cooperativa.js';
+import { DiscoAdapter } from './adapters/disco.js';
 import { ensureStore, startRun, finishRun, persistProduct } from './persist.js';
 
-// `npm run scrape -- todo` baja el catalogo entero (~6.100 articulos).
-const arg = process.argv[2] ?? '20';
-const limit = arg === 'todo' || arg === 'all' ? Number.POSITIVE_INFINITY : Number(arg);
-const adapter = new CooperativaAdapter();
+// npm run scrape -- [cadena] [limite]
+//   npm run scrape -- 20            los primeros 20 de La Coope
+//   npm run scrape -- disco todo    el catalogo entero de Disco
+const ADAPTERS: Record<string, () => ChainAdapter> = {
+  coope: () => new CooperativaAdapter(),
+  disco: () => new DiscoAdapter(),
+};
+
+const args = process.argv.slice(2);
+const clave = args[0] !== undefined && args[0] in ADAPTERS ? args.shift()! : 'coope';
+const pedido = args[0] ?? '20';
+const limit =
+  pedido === 'todo' || pedido === 'all' ? Number.POSITIVE_INFINITY : Number(pedido);
+
+const adapter = ADAPTERS[clave]!();
 
 console.log(
   `Scrapeando ${adapter.displayName} (limite: ${limit === Infinity ? 'catalogo completo' : limit})\n`,
@@ -23,7 +36,8 @@ try {
     total++;
     if (created) creados++;
     const precio = (sp.priceCents / 100).toFixed(2).padStart(10);
-    console.log(`${String(total).padStart(3)}. ${created ? '+' : '·'} $${precio}  ${sp.name.slice(0, 52)}`);
+    const ean = sp.ean13 ? ` [${sp.ean13}]` : '';
+    console.log(`${String(total).padStart(4)}. ${created ? '+' : '·'} $${precio}${ean}  ${sp.name.slice(0, 46)}`);
   }
   await finishRun(runId, total);
   console.log(`\nListo: ${total} productos (${creados} nuevos, ${total - creados} actualizados).`);

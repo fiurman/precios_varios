@@ -73,3 +73,32 @@ export function toCoopeUrlSlug(name: string): string {
     .replace(/\?/g, '%3F')
     .replace(/#/g, '%23');
 }
+
+/** Saca el contenido del nombre cuando la fuente no lo publica aparte.
+ *
+ *  La Coope trae gramaje y unidad en campos propios; las cadenas VTEX no, y lo
+ *  unico que hay es el nombre ("Azucar Molida 1 Kg Ledesma"). Sin esto no se
+ *  puede calcular precio por kilo ni comparar 900ml contra 1L entre cadenas.
+ *
+ *  Si aparecen varias medidas nos quedamos con la de peso o volumen antes que
+ *  con el conteo: en "30 Mts x 4 Un" el 4 son unidades, pero en "Yogur 120g x
+ *  4" lo que importa para comparar es el gramaje. */
+const RE_CONTENIDO = /(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|grs?|gramos?|g|mls?|cc|lts?|litros?|l|unid(?:ad(?:es)?)?|un)\b/gi;
+const UNIDADES_DE_MEDIDA = new Set(['g', 'kg', 'ml', 'l']);
+
+export function parseContentFromName(
+  name: string,
+): { value: number; unit: string } | null {
+  const encontrados: { value: number; unit: string }[] = [];
+
+  for (const m of toNormalizedName(name).matchAll(RE_CONTENIDO)) {
+    const value = Number.parseFloat(m[1]!.replace(',', '.'));
+    const unit = normalizeUnit(m[2]!);
+    if (!unit || !Number.isFinite(value) || value <= 0) continue;
+    encontrados.push({ value, unit });
+  }
+
+  return (
+    encontrados.find((c) => UNIDADES_DE_MEDIDA.has(c.unit)) ?? encontrados[0] ?? null
+  );
+}
