@@ -4,3 +4,5 @@ export * from './products.js';
 export * from './prices.js';
 export * from './media.js';
 export * from './scraping.js';
+export * from './sources.js';
+export * from './matches.js';
