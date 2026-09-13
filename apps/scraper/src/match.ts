@@ -7,7 +7,6 @@ import { contenidoBase, jaccard, nameTokens, toNormalizedName } from './normaliz
  *  score, para revisar y aplicar aparte. */
 
 const SIN_EAN = 'cooperativa_obrera';
-const CON_EAN = 'disco';
 
 /** Cuanto puede diferir el gramaje y seguir siendo el mismo producto. Cubre el
  *  redondeo de "0.29 kg" contra "290 grs", no un envase distinto. */
@@ -29,17 +28,29 @@ interface Fila {
   contentUnit: string | null;
 }
 
-async function traerCadena(chain: string, conEan: boolean): Promise<Fila[]> {
+/** Los productos de una cadena que todavia no tienen codigo de barras. */
+async function traerSinEan(chain: string): Promise<Fila[]> {
   const { rows } = await pool.query<Fila>(
     `select p.id, p.name, p.brand, p.ean13,
             p.content_value as "contentValue", p.content_unit as "contentUnit"
        from products p
        join product_sources s on s.product_id = p.id
-      where s.chain = $1
-        and p.deleted_at is null
-        and p.brand is not null
-        and p.ean13 is ${conEan ? 'not null' : 'null'}`,
+      where s.chain = $1 and p.deleted_at is null
+        and p.brand is not null and p.ean13 is null`,
     [chain],
+  );
+  return rows;
+}
+
+/** Todo lo que tenga EAN, venga de la cadena que venga. Los productos que
+ *  comparten codigo entre cadenas ya son una sola fila, asi que preguntar por
+ *  cadena aca no tendria sentido: se buscarian dos veces los mismos. */
+async function traerConEan(): Promise<Fila[]> {
+  const { rows } = await pool.query<Fila>(
+    `select p.id, p.name, p.brand, p.ean13,
+            p.content_value as "contentValue", p.content_unit as "contentUnit"
+       from products p
+      where p.deleted_at is null and p.brand is not null and p.ean13 is not null`,
   );
   return rows;
 }
@@ -47,8 +58,8 @@ async function traerCadena(chain: string, conEan: boolean): Promise<Fila[]> {
 const claveMarca = (b: string | null) => toNormalizedName(b ?? '');
 
 async function main(): Promise<void> {
-  const izquierda = await traerCadena(SIN_EAN, false);
-  const derecha = await traerCadena(CON_EAN, true);
+  const izquierda = await traerSinEan(SIN_EAN);
+  const derecha = await traerConEan();
 
   console.log(`Emparejando ${izquierda.length} productos sin EAN contra ${derecha.length} con EAN.\n`);
 
@@ -114,6 +125,26 @@ async function main(): Promise<void> {
     });
   }
 
+  // Dos productos distintos no pueden ser el mismo del otro lado: cuando varios
+  // reclaman el mismo par, solo el de mejor score queda en auto. Es lo que
+  // separa "raid" de "raid max", que comparten todo menos una palabra.
+  const mejorPorDestino = new Map<string, number>();
+  for (const m of aGuardar) {
+    if (m.status !== 'auto') continue;
+    const actual = mejorPorDestino.get(m.matchProductId);
+    const score = Number(m.score);
+    if (actual === undefined || score > actual) mejorPorDestino.set(m.matchProductId, score);
+  }
+
+  let degradados = 0;
+  for (const m of aGuardar) {
+    if (m.status !== 'auto') continue;
+    if (Number(m.score) < mejorPorDestino.get(m.matchProductId)!) {
+      m.status = 'pendiente';
+      degradados++;
+    }
+  }
+
   // Recalcular no debe pisar lo que una persona ya decidio.
   for (let i = 0; i < aGuardar.length; i += 500) {
     await db.insert(productMatches).values(aGuardar.slice(i, i + 500))
@@ -133,8 +164,9 @@ async function main(): Promise<void> {
   const auto = aGuardar.filter((m) => m.status === 'auto').length;
   console.log(`  auto (score alto):  ${auto}`);
   console.log(`  pendientes:         ${aGuardar.length - auto}`);
-  console.log(`  sin marca en ${CON_EAN}: ${sinMarcaEnLaOtra}`);
+  console.log(`  sin marca del otro lado: ${sinMarcaEnLaOtra}`);
   console.log(`  sin candidato bueno:     ${descartados}`);
+  console.log(`  degradados por conflicto: ${degradados}`);
   console.log(`\nGuardados ${aGuardar.length} pares en product_matches.`);
 }
 

@@ -36,6 +36,20 @@
       "when": 1789253255719,
       "tag": "0004_product_matches",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789259451414,
+      "tag": "0005_canonical_product",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789284531031,
+      "tag": "0006_media_unica",
+      "breakpoints": true
     }
   ]
 }

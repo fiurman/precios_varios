@@ -106,9 +106,13 @@ export function parseContentFromName(
   );
 }
 
-/** Palabras que aparecen en casi todos los nombres y no distinguen nada. */
+/** Palabras que aparecen en casi todos los nombres y no distinguen nada.
+ *
+ *  Ojo con "con" y "sin": parecen muletillas pero niegan, y sacarlas volvia
+ *  identicos a "mani con piel" y "mani sin piel". Van tratadas como cualquier
+ *  otro token. */
 const RUIDO = new Set([
-  'con', 'sin', 'para', 'por', 'del', 'los', 'las', 'sabor', 'tipo', 'pack',
+  'para', 'por', 'del', 'los', 'las', 'sabor', 'tipo', 'pack',
   'grs', 'gramos', 'kgs', 'kilo', 'kilos', 'lts', 'litro', 'litros', 'cm3',
   'und', 'unidad', 'unidades',
 ]);

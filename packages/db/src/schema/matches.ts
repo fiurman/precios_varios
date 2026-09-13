@@ -37,6 +37,8 @@ export const productMatches = pgTable(
     status: text('status').notNull().default('pendiente'),
 
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    /** Cuando se volco a products.canonical_product_id. NULL = todavia no. */
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
