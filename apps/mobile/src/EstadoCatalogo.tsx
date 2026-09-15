@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { sincronizar, type Progreso } from './local/sync';
+import {
+  ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View,
+} from 'react-native';
+import { guardarServidor, servidor, sincronizar, type Progreso } from './local/sync';
 import { ultimaSincronizacion } from './local/db';
 import { tema } from './tema';
 
@@ -41,6 +43,13 @@ export function EstadoCatalogo({
   const [error, setError] = useState<string | null>(null);
   const [oculto, setOculto] = useState(false);
   const [bajadoEn, setBajadoEn] = useState<Date | null>(null);
+  const [editando, setEditando] = useState(false);
+  const [direccion, setDireccion] = useState('');
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    servidor().then(setDireccion).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -68,9 +77,10 @@ export function EstadoCatalogo({
   };
 
   return (
-    <View style={estilos.caja}>
+    <View style={estilos.contenedor}>
+      <View style={estilos.caja}>
       <View style={estilos.texto}>
-        <Text style={estilos.titulo}>
+        <Text style={estilos.titulo} onLongPress={() => setEditando(!editando)}>
           {progreso ? TEXTO[progreso.etapa] : yaEsta ? 'Catalogo en el telefono' : 'Falta bajar el catalogo'}
         </Text>
         <Text style={estilos.detalle}>
@@ -95,11 +105,37 @@ export function EstadoCatalogo({
           </Text>
         </Pressable>
       )}
+      </View>
+
+      {/* La direccion no se muestra: al usuario no le dice nada y de paso
+          expone la URL del catalogo en pantalla. Queda accesible con una
+          pulsacion larga sobre el titulo, como salida de emergencia por si
+          alguna vez hay que apuntar a otro lado sin recompilar. */}
+      {editando && (
+        <View style={estilos.servidorFila}>
+          <TextInput
+            style={estilos.servidorCampo}
+            value={direccion}
+            onChangeText={setDireccion}
+            autoCapitalize="none"
+            autoCorrect={false}
+            inputMode="url"
+            placeholderTextColor={tema.suave}
+          />
+          <Pressable
+            style={estilos.boton}
+            onPress={() => { void guardarServidor(direccion); setEditando(false); }}
+          >
+            <Text style={estilos.botonTexto}>Guardar</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
 
 const estilos = StyleSheet.create({
+  contenedor: { alignSelf: 'stretch', marginHorizontal: 16, marginBottom: 10 },
   caja: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -125,4 +161,16 @@ const estilos = StyleSheet.create({
     paddingVertical: 8,
   },
   botonTexto: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  servidorFila: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 8 },
+  servidorCampo: {
+    flex: 1,
+    backgroundColor: tema.tarjeta,
+    borderWidth: 1,
+    borderColor: tema.borde,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 12,
+    color: tema.texto,
+  },
 });

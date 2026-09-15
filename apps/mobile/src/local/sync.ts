@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db, revisionLocal, sinTildes } from './db';
 
 /** Trae el catalogo desde los archivos estaticos y lo guarda local.
@@ -6,7 +7,22 @@ import { db, revisionLocal, sinTildes } from './db';
  *  telefono pide primero el manifiesto —medio KB— y si ya esta al dia, ahi
  *  termina. Si no, baja el catalogo completo. */
 
-const BASE = process.env.EXPO_PUBLIC_SNAPSHOT_URL ?? 'http://localhost:3000/snapshot';
+const POR_DEFECTO = process.env.EXPO_PUBLIC_SNAPSHOT_URL ?? 'http://localhost:3000/snapshot';
+const CLAVE_SERVIDOR = 'servidor.snapshot';
+
+/** De donde se baja el catalogo.
+ *
+ *  Configurable y no fijo en el build: la direccion por defecto queda grabada
+ *  al compilar, pero un router que reparte IP por DHCP te la cambia cuando se
+ *  le da la gana. Sin esto, ese dia la app queda rota hasta recompilarla. */
+export async function servidor(): Promise<string> {
+  const guardado = await AsyncStorage.getItem(CLAVE_SERVIDOR).catch(() => null);
+  return (guardado || POR_DEFECTO).replace(/\/+$/, '');
+}
+
+export async function guardarServidor(url: string): Promise<void> {
+  await AsyncStorage.setItem(CLAVE_SERVIDOR, url.trim()).catch(() => {});
+}
 
 interface Manifiesto {
   revision: number;
@@ -49,7 +65,8 @@ export async function sincronizar(
 ): Promise<Progreso> {
   avisar({ etapa: 'consultando' });
 
-  const res = await fetch(`${BASE}/manifiesto.json`);
+  const base = await servidor();
+  const res = await fetch(`${base}/manifiesto.json`);
   if (!res.ok) throw new Error(`No pudimos leer el manifiesto (${res.status})`);
   const manifiesto = (await res.json()) as Manifiesto;
 
@@ -61,7 +78,7 @@ export async function sincronizar(
   }
 
   avisar({ etapa: 'descargando', revision: manifiesto.revision });
-  const bajada = await fetch(`${BASE}/${manifiesto.completo}`);
+  const bajada = await fetch(`${base}/${manifiesto.completo}`);
   if (!bajada.ok) throw new Error(`No pudimos bajar el catalogo (${bajada.status})`);
   // fetch descomprime el gzip solo: llega JSON.
   const snapshot = (await bajada.json()) as Snapshot;

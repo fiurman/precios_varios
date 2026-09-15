@@ -24,6 +24,7 @@
     "comparar": "npm run comparar -w @precios/scraper --",
     "prune": "npm run prune -w @precios/scraper --",
     "api": "npm run dev -w @precios/api",
-    "snapshot": "npm run snapshot -w @precios/scraper --"
+    "snapshot": "npm run snapshot -w @precios/scraper --",
+    "publicar": "npm run publicar -w @precios/scraper --"
   }
 }

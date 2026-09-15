@@ -255,19 +255,27 @@ export function ChanguitoPantalla({
           ))}
         </View>
 
-        <View style={estilos.vistas}>
-          <Pressable onPress={() => setVista('lista')}>
-            <Text style={[estilos.vistaTexto, vista === 'lista' && estilos.vistaActiva]}>
-              Detallado
-            </Text>
-          </Pressable>
-          <Pressable onPress={() => setVista('ticket')}>
-            <Text style={[estilos.vistaTexto, vista === 'ticket' && estilos.vistaActiva]}>
-              Compactado
-            </Text>
-          </Pressable>
+        {/* Pestañas de navegador: la activa comparte fondo con el panel y
+            tapa su borde superior, asi que las dos se leen como una sola
+            pieza. La inactiva queda detras, sin fondo ni borde. */}
+        <View style={estilos.pestanasFila}>
+          {(['lista', 'ticket'] as const).map((v) => {
+            const activa = vista === v;
+            return (
+              <Pressable
+                key={v}
+                style={[estilos.pestana, activa && estilos.pestanaActiva]}
+                onPress={() => setVista(v)}
+              >
+                <Text style={[estilos.pestanaTexto, activa && estilos.pestanaTextoActivo]}>
+                  {v === 'lista' ? 'Detalle' : 'Compacta'}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
+        <View style={estilos.panel}>
         <FlatList
           data={items}
           keyExtractor={(i) => i.grupoId}
@@ -288,6 +296,7 @@ export function ChanguitoPantalla({
             ) : null
           }
         />
+        </View>
 
         {/* Mientras el panel de agregar esta abierto el pie se retira: si no,
             el boton de caja queda asomando por detras del panel. */}
@@ -365,10 +374,38 @@ const estilos = StyleSheet.create({
   opcionPrecio: { fontSize: 14, fontWeight: '600', color: tema.texto, fontVariant: ['tabular-nums'] },
   opcionTextoActivo: { color: tema.acento },
   opcionFalta: { fontSize: 10, color: tema.alerta },
-  vistas: { flexDirection: 'row', gap: 16, marginBottom: 8 },
-  vistaTexto: { fontSize: 13, color: tema.suave, paddingVertical: 4 },
-  vistaActiva: { color: tema.acento, fontWeight: '700' },
-  lista: { paddingBottom: 8 },
+  pestanasFila: {
+    flexDirection: 'row',
+    marginLeft: 14,
+    // Baja una linea para montarse sobre el borde del panel y taparlo.
+    marginBottom: -1,
+    zIndex: 1,
+  },
+  pestana: {
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    marginRight: 2,
+  },
+  pestanaActiva: {
+    backgroundColor: tema.tarjeta,
+    borderWidth: 1,
+    borderColor: tema.borde,
+    // El borde de abajo del color del panel: ahi es donde se funden.
+    borderBottomColor: tema.tarjeta,
+  },
+  pestanaTexto: { fontSize: 13, color: tema.suave, fontWeight: '500' },
+  pestanaTextoActivo: { color: tema.texto, fontWeight: '700' },
+  panel: {
+    flex: 1,
+    backgroundColor: tema.tarjeta,
+    borderWidth: 1,
+    borderColor: tema.borde,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  lista: { padding: 10 },
   linea: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: tema.tarjeta,
     borderWidth: 1, borderColor: tema.borde, borderRadius: 10,
@@ -397,10 +434,7 @@ const estilos = StyleSheet.create({
     minWidth: 70, textAlign: 'right', fontSize: 15, fontWeight: '600',
     color: tema.texto, fontVariant: ['tabular-nums'],
   },
-  ticket: {
-    backgroundColor: tema.tarjeta, borderWidth: 1, borderColor: tema.borde,
-    borderRadius: 10, paddingVertical: 6, paddingHorizontal: 10, marginBottom: 8,
-  },
+  ticket: { paddingVertical: 6, paddingHorizontal: 12 },
   ticketLinea: {
     flexDirection: 'row',
     alignItems: 'center',
