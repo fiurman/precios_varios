@@ -5,7 +5,9 @@ import {
 import { products } from './products.js';
 
 /** MODO FULL. Nada de este archivo viaja en el sync Light. */
-export const productMedia = pgTable('product_media', {
+export const productMedia = pgTable(
+  'product_media',
+  {
   id: uuid('id').primaryKey().defaultRandom(),
   productId: uuid('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
   kind: text('kind').notNull(), // 'thumbnail' | 'full' | 'nutritional'
@@ -18,7 +20,12 @@ export const productMedia = pgTable('product_media', {
     .notNull()
     .default(sql`nextval('global_revision_seq')`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+  },
+  // Clave de upsert del scraper: la misma imagen no se duplica al re-scrapear.
+  // Por url y no por kind porque un producto canonico puede tener foto de mas
+  // de una cadena, y tener ambas es mejor que pisarlas entre si.
+  (t) => [unique('uq_media_url').on(t.productId, t.url)],
+);
 
 /** Matching visual offline: para cuando la camara ve un producto sin codigo
  *  de barras visible o borroso. */

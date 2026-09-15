@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import {
   pgTable, uuid, text, varchar, numeric, boolean, jsonb, bigint, timestamp, index,
 } from 'drizzle-orm/pg-core';
@@ -15,6 +16,17 @@ export const products = pgTable(
     // Es justamente el caso que despues resuelve el matching visual.
     ean13: varchar('ean13', { length: 13 }).unique(),
     internalSku: text('internal_sku'),
+
+    // Apunta al producto que hace de canonico cuando dos fichas de cadenas
+    // distintas son el mismo articulo y no hay EAN que lo pruebe. Cuando si lo
+    // hay, el scraper ya las guarda en una sola fila y esto queda NULL.
+    //
+    // Es un puntero, no una fusion: aplicar un match es un UPDATE, deshacerlo
+    // tambien. El producto original conserva su historial y sus precios.
+    // El tipo explicito rompe la recursion: la columna apunta a la tabla que
+    // la contiene y TS no puede inferirla sola.
+    canonicalProductId: uuid('canonical_product_id')
+      .references((): AnyPgColumn => products.id, { onDelete: 'set null' }),
 
     name: text('name').notNull(),
     normalizedName: text('normalized_name').notNull(), // minusculas y sin tildes
@@ -41,5 +53,6 @@ export const products = pgTable(
   (t) => [
     index('idx_products_revision').on(t.revision),
     index('idx_products_category').on(t.categoryId),
+    index('idx_products_canonical').on(t.canonicalProductId),
   ],
 );

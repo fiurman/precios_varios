@@ -1,7 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import {
   db, stores, categories, products, productSources, prices, currentPrices,
-  scrapeRuns, rawScrapeItems,
+  scrapeRuns, rawScrapeItems, productMedia,
 } from '@precios/db';
 import type { SourceProduct } from './adapters/types.js';
 import { toNormalizedName, toSlugSegment } from './normalize.js';
@@ -123,14 +123,23 @@ export async function persistProduct(
     .set({ lastSeenAt: new Date(), url: sp.url, rawName: sp.name })
     .where(and(eq(productSources.chain, ctx.chain), eq(productSources.externalId, sp.externalId)));
 
-  // 3. Historial: siempre se agrega, nunca se pisa.
+  // 3. Imagen. Va en tabla aparte porque no viaja en el sync Light: el
+  //    celular baja primero el catalogo de texto, que es chico y sirve solo,
+  //    y las fotos despues si las quiere.
+  if (sp.imageUrl) {
+    await db.insert(productMedia)
+      .values({ productId, kind: 'thumbnail', url: sp.imageUrl })
+      .onConflictDoNothing({ target: [productMedia.productId, productMedia.url] });
+  }
+
+  // 4. Historial: siempre se agrega, nunca se pisa.
   await db.insert(prices).values({
     productId, storeId: ctx.storeId,
     priceCents: sp.priceCents, promoCents: sp.promoCents, promoLabel: sp.promoLabel,
     scrapeRunId: ctx.runId,
   });
 
-  // 4. Precio vigente: este si se pisa. El trigger le sube la revision.
+  // 5. Precio vigente: este si se pisa. El trigger le sube la revision.
   await db.insert(currentPrices)
     .values({ productId, storeId: ctx.storeId, priceCents: sp.priceCents, promoCents: sp.promoCents })
     .onConflictDoUpdate({

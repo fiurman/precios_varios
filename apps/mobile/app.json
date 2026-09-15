@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Precios Varios",
+    "slug": "precios-varios",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize",
+      "package": "ar.com.preciosvarios",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "preciosvarios",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Para escanear el codigo de barras de un producto."
+        }
+      ],
+      "expo-sqlite"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "90d7a799-a67c-4800-984f-b7eee6adc2c6"
+      }
+    },
+    "owner": "nicler"
+  }
+}
