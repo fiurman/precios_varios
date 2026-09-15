@@ -278,10 +278,8 @@ const estilos = StyleSheet.create({
     borderColor: tema.borde,
     padding: 12,
     gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: -4 },
+    // Hacia arriba: el panel se apoya en el borde de abajo de la pantalla.
+    boxShadow: '0px -4px 12px rgba(0, 0, 0, 0.12)',
     elevation: 12,
   },
   modos: { flexDirection: 'row', alignItems: 'center', gap: 16 },

@@ -111,10 +111,9 @@ const estilos = StyleSheet.create({
     height: LADO,
     borderRadius: LADO / 2,
     backgroundColor: tema.acento,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    // boxShadow y no shadow*: react-native-web deprecio esas props y avisa en
+    // cada render. La forma nueva funciona igual en Android y en iOS.
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.25)',
     elevation: 6,
   },
   centro: { flex: 1, alignItems: 'center', justifyContent: 'center' },

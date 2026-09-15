@@ -1,7 +1,9 @@
 import { Platform } from 'react-native';
 import * as remoto from './api';
 import type { Cadena, Grupo } from './api';
-import { buscarLocal, cadenasLocales, hayCatalogo, porEanLocal, revisionLocal } from './local/db';
+import {
+  buscarLocal, cadenasLocales, hayCatalogo, porEanLocal, porIdLocal, revisionLocal,
+} from './local/db';
 
 /** De donde salen los datos del catalogo.
  *
@@ -35,6 +37,17 @@ export async function porEan(ean13: string): Promise<Grupo> {
     return g;
   }
   return remoto.porEan(ean13);
+}
+
+/** Devuelve null en vez de tirar: repetir una compra vieja puede toparse con
+ *  un producto que la cadena dejo de vender, y eso no es un error. */
+export async function porId(id: string): Promise<Grupo | null> {
+  try {
+    if (local) return await porIdLocal(id);
+    return await remoto.porId(id);
+  } catch {
+    return null;
+  }
 }
 
 export async function listarCadenas(): Promise<Cadena[]> {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { plata } from './api';
 import { EstadoCatalogo } from './EstadoCatalogo';
 import type { Compra, Historial as Estado } from './compras';
@@ -14,10 +15,14 @@ function Ticket({
   compra,
   onBorrar,
   onDevolver,
+  onRepetir,
+  repitiendo,
 }: {
   compra: Compra;
   onBorrar: () => void;
   onDevolver?: () => void;
+  onRepetir?: () => void;
+  repitiendo?: boolean;
 }) {
   const [abierto, setAbierto] = useState(false);
 
@@ -31,6 +36,21 @@ function Ticket({
           </Text>
         </View>
         <Text style={estilos.total}>{plata(compra.totalCentavos)}</Text>
+
+        {/* Repetir a la vista, sin desplegar: es la accion que se busca al
+            entrar al historial, no un detalle escondido adentro del ticket. */}
+        {onRepetir && (
+          <Pressable
+            style={estilos.repetirAtajo}
+            onPress={onRepetir}
+            disabled={repitiendo}
+            hitSlop={8}
+          >
+            {repitiendo
+              ? <ActivityIndicator size="small" color={tema.acento} />
+              : <MaterialIcons name="replay" size={21} color={tema.acento} />}
+          </Pressable>
+        )}
       </Pressable>
 
       {abierto && (
@@ -38,10 +58,27 @@ function Ticket({
           {compra.lineas.map((l, i) => (
             <LineaTicketCompra key={`${l.nombre}-${i}`} linea={l} />
           ))}
+          {/* Dos acciones distintas y a proposito separadas: repetir es
+              "quiero comprar lo mismo otra vez" y vuelve a consultar los
+              precios de hoy; deshacer es "me equivoque" y devuelve la compra
+              tal cual estaba, sacandola del historial. */}
           <View style={estilos.acciones}>
+            {onRepetir && (
+              <Pressable
+                style={[estilos.repetir, repitiendo && estilos.ocupado]}
+                onPress={onRepetir}
+                disabled={repitiendo}
+              >
+                {repitiendo ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={estilos.repetirTexto}>Repetir con precios de hoy</Text>
+                )}
+              </Pressable>
+            )}
             {onDevolver && (
               <Pressable style={estilos.devolver} onPress={onDevolver}>
-                <Text style={estilos.devolverTexto}>Volver al changuito</Text>
+                <Text style={estilos.devolverTexto}>Deshacer</Text>
               </Pressable>
             )}
             <Pressable style={estilos.borrarBoton} onPress={onBorrar}>
@@ -71,13 +108,17 @@ export function HistorialPantalla({
   catalogo,
   onActualizado,
   onDevolver,
+  onRepetir,
 }: {
   historial: Estado;
   catalogo?: { local: boolean; revision: number } | null;
   onActualizado?: () => void;
-  /** Devuelve los items de una compra cerrada al changuito. */
+  /** Devuelve los items tal cual estaban y saca la compra del historial. */
   onDevolver?: (compra: Compra) => void;
+  /** Vuelve a armar el changuito consultando los precios de hoy. */
+  onRepetir?: (compra: Compra) => Promise<void>;
 }) {
+  const [repitiendo, setRepitiendo] = useState<string | null>(null);
   const { compras, gastoTotal, borrar } = historial;
 
   // Si el catalogo ya esta bajado, el aviso de arriba no aparece nunca mas:
@@ -120,6 +161,19 @@ export function HistorialPantalla({
           onBorrar={() => void borrar(c.id)}
           // Las compras viejas no guardaron sus items: no hay que devolver.
           onDevolver={onDevolver && c.items?.length ? () => onDevolver(c) : undefined}
+          onRepetir={
+            onRepetir && c.items?.length
+              ? async () => {
+                  setRepitiendo(c.id);
+                  try {
+                    await onRepetir(c);
+                  } finally {
+                    setRepitiendo(null);
+                  }
+                }
+              : undefined
+          }
+          repitiendo={repitiendo === c.id}
         />
       ))}
 
@@ -168,9 +222,16 @@ const estilos = StyleSheet.create({
     minWidth: 74, textAlign: 'right', fontSize: 13,
     color: tema.texto, fontVariant: ['tabular-nums'],
   },
-  acciones: { flexDirection: 'row', gap: 8, paddingVertical: 8 },
+  acciones: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 8 },
+  repetirAtajo: { paddingLeft: 6, paddingVertical: 4 },
+  repetir: {
+    flex: 1, minWidth: 150, borderRadius: 8, paddingVertical: 10,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: tema.acento,
+  },
+  repetirTexto: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  ocupado: { opacity: 0.6 },
   devolver: {
-    flex: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center',
+    borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center',
     borderWidth: 1, borderColor: tema.acento, backgroundColor: tema.tarjeta,
   },
   devolverTexto: { color: tema.acento, fontWeight: '600', fontSize: 13 },

@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-
 // ademas respeta el notch y la barra de gestos en Android, que el viejo no.
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { plata, type Cadena } from './src/api';
-import { listarCadenas, prepararCatalogo } from './src/catalogo';
+import { listarCadenas, porId, prepararCatalogo } from './src/catalogo';
 import { Buscar } from './src/Buscar';
 import { Escanear } from './src/Escanear';
 import { ChanguitoPantalla } from './src/Changuito';
@@ -139,6 +139,31 @@ function Contenido() {
               changuito.restaurar(compra.items);
               if (compra.cadena) changuito.setCadena(compra.cadena);
               void historial.borrar(compra.id);
+              setPestana('changuito');
+            }}
+            onRepetir={async (compra) => {
+              if (!compra.items) return;
+
+              // Se vuelve a consultar cada producto en vez de reusar lo
+              // guardado: la gracia de repetir una compra es ver cuanto sale
+              // hoy, y los precios de la compra vieja estan congelados a
+              // proposito para que el ticket siga diciendo lo que pagaste.
+              const frescos = await Promise.all(
+                compra.items.map(async (viejo) => {
+                  const grupo = await porId(viejo.grupoId);
+                  if (!grupo) return viejo; // ya no esta en el catalogo: va como estaba
+                  return {
+                    ...viejo,
+                    nombre: grupo.nombre,
+                    imagen: grupo.imagen,
+                    porPeso: grupo.porPeso,
+                    ofertas: grupo.ofertas,
+                  };
+                }),
+              );
+
+              changuito.restaurar(frescos);
+              if (compra.cadena) changuito.setCadena(compra.cadena);
               setPestana('changuito');
             }}
           />

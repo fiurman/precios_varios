@@ -49,6 +49,7 @@ export function buscar(q: string, cadena?: string): Promise<{ resultados: Grupo[
 }
 
 export const porEan = (ean13: string): Promise<Grupo> => pedir(`/ean/${ean13}`);
+export const porId = (id: string): Promise<Grupo> => pedir(`/producto/${id}`);
 export const listarCadenas = (): Promise<{ cadenas: Cadena[] }> => pedir('/cadenas');
 
 /** El precio que se paga hoy: la promo si hay, si no el de lista. */

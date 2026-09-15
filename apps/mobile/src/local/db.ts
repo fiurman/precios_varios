@@ -245,6 +245,20 @@ export async function buscarLocal(
   return intercalar(agrupar(filas), opts.limite);
 }
 
+/** Busca por el id del grupo canonico. Lo usa repetir una compra vieja: los
+ *  items guardados tienen su id, pero los precios de entonces ya no sirven. */
+export async function porIdLocal(id: string): Promise<Grupo | null> {
+  const d = await db();
+  const filas = await d.getAllAsync<FilaGrupo>(
+    `WITH elegidos AS (
+       SELECT coalesce(p.canonico_id, p.id) canon FROM productos p WHERE p.id = ? LIMIT 1
+     )
+     ${SQL_GRUPOS}`,
+    id,
+  );
+  return agrupar(filas)[0] ?? null;
+}
+
 export async function porEanLocal(ean13: string): Promise<Grupo | null> {
   const d = await db();
   const filas = await d.getAllAsync<FilaGrupo>(
