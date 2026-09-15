@@ -18,7 +18,16 @@ const ALCANCE = MAX_OFFSET + PAGE_SIZE;
  *  Nada en el catalogo se acerca, es solo el extremo abierto del intervalo. */
 const PRECIO_TECHO = 10_000_000;
 
-const REINTENTOS = 3;
+/** Cuantas veces reintentar un pedido que fallo, y cuanto esperar entre una y
+ *  otra: 2, 4, 8, 16 y 32 segundos, casi un minuto en total.
+ *
+ *  Antes eran 3 intentos con esperas de 1,4 y 2,8 segundos. Se rendia a los
+ *  cuatro segundos, y eso alcanza para un parpadeo pero no para un hipo de
+ *  verdad: una corrida murio con un HTTP 500 que a los pocos segundos ya no
+ *  estaba, despues de 11.671 productos. Tras miles de pedidos seguidos, hay que
+ *  darle tiempo al otro lado a recuperarse. */
+const REINTENTOS = 5;
+const ESPERA_BASE_MS = 1000;
 
 interface VtexCategoria {
   id: number;
@@ -67,7 +76,7 @@ async function apiGet<T>(api: string, path: string): Promise<T> {
       return (await res.json()) as T;
     } catch (err) {
       ultimo = err;
-      if (intento < REINTENTOS) await sleep(DELAY_MS * 2 ** intento);
+      if (intento < REINTENTOS) await sleep(ESPERA_BASE_MS * 2 ** intento);
     }
   }
   throw ultimo;
@@ -94,7 +103,7 @@ async function pedirPagina(api: string, query: string, desde: number): Promise<P
       return { items, total: Number.isFinite(total) ? total : items.length };
     } catch (err) {
       ultimo = err;
-      if (intento < REINTENTOS) await sleep(DELAY_MS * 2 ** intento);
+      if (intento < REINTENTOS) await sleep(ESPERA_BASE_MS * 2 ** intento);
     }
   }
   throw ultimo;
@@ -208,21 +217,39 @@ export class VtexAdapter implements ChainAdapter {
     }
 
     const ctx: Recorrido = { vistos: new Set<string>(), emitidos: 0, limit };
+    const salteadas: string[] = [];
 
     for (const hoja of hojas(arbol)) {
       if (ctx.emitidos >= ctx.limit) return;
 
-      const query = `fq=C:/${hoja.ids.join('/')}/`;
-      const primera = await pedirPagina(this.api, query, 0);
-      await sleep(DELAY_MS);
+      // Cada categoria en su propio try. Si una no responde ni con los cinco
+      // reintentos, se anota y se sigue con la siguiente: perder una gondola
+      // es molesto, perder el resto del catalogo por esa gondola es absurdo.
+      // Fue lo que paso: un HTTP 500 en Mundo Bebe corto Carrefour a los
+      // 11.671 productos con el catalogo casi terminado.
+      try {
+        const query = `fq=C:/${hoja.ids.join('/')}/`;
+        const primera = await pedirPagina(this.api, query, 0);
+        await sleep(DELAY_MS);
 
-      // Casi todas las hojas entran enteras; solo las gigantes (galletitas
-      // dulces, vinos tintos) hay que partirlas para pasar el tope de VTEX.
-      if (primera.total > ALCANCE) {
-        yield* this.recorrerPorPrecio(hoja, query, 0, PRECIO_TECHO, ctx);
-      } else {
-        yield* this.paginar(query, primera, ctx);
+        // Casi todas las hojas entran enteras; solo las gigantes (galletitas
+        // dulces, vinos tintos) hay que partirlas para pasar el tope de VTEX.
+        if (primera.total > ALCANCE) {
+          yield* this.recorrerPorPrecio(hoja, query, 0, PRECIO_TECHO, ctx);
+        } else {
+          yield* this.paginar(query, primera, ctx);
+        }
+      } catch (err) {
+        salteadas.push(hoja.nombre);
+        console.warn(`  ! "${hoja.nombre}" quedo afuera: ${String(err).slice(0, 110)}`);
       }
+    }
+
+    if (salteadas.length > 0) {
+      console.warn(
+        `  ! ${salteadas.length} categorias sin bajar: ${salteadas.slice(0, 6).join(', ')}` +
+          `${salteadas.length > 6 ? ', ...' : ''}`,
+      );
     }
   }
 

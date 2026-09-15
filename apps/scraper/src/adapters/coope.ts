@@ -65,30 +65,57 @@ interface ApiPagina {
   articulos: ApiArticulo[] | null;
 }
 
+/** Cuantas veces reintentar y cuanto esperar: 2, 4, 8, 16 y 32 segundos.
+ *
+ *  Este adapter no tenia reintentos. Zafo hasta ahora, pero una corrida de
+ *  Carrefour murio por un HTTP 500 pasajero y aca el riesgo es el mismo: son
+ *  cientos de pedidos seguidos contra un servidor que no controlamos. */
+const REINTENTOS = 5;
+const ESPERA_BASE_MS = 1000;
+
+/** Repite el pedido ante un fallo pasajero, esperando cada vez mas. */
+async function conReintentos<T>(que: string, hacer: () => Promise<T>): Promise<T> {
+  let ultimo: unknown;
+
+  for (let intento = 1; intento <= REINTENTOS; intento++) {
+    try {
+      return await hacer();
+    } catch (err) {
+      ultimo = err;
+      if (intento < REINTENTOS) await sleep(ESPERA_BASE_MS * 2 ** intento);
+    }
+  }
+  throw new Error(`${que}: ${String(ultimo)}`);
+}
+
 async function apiGet<T>(api: string, path: string): Promise<T> {
-  const res = await fetch(`${api}/${path}`, {
-    headers: { 'User-Agent': UA, Accept: 'application/json' },
+  return conReintentos(path, async () => {
+    const res = await fetch(`${api}/${path}`, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`respondio HTTP ${res.status}`);
+    const body = (await res.json()) as ApiEnvelope<T>;
+    if (body.estado !== 1) throw new Error(body.mensaje);
+    return body.datos;
   });
-  if (!res.ok) throw new Error(`${path} respondio HTTP ${res.status}`);
-  const body = (await res.json()) as ApiEnvelope<T>;
-  if (body.estado !== 1) throw new Error(`${path}: ${body.mensaje}`);
-  return body.datos;
 }
 
 async function apiPost<T>(api: string, path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${api}/${path}`, {
-    method: 'POST',
-    headers: {
-      'User-Agent': UA,
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
+  return conReintentos(path, async () => {
+    const res = await fetch(`${api}/${path}`, {
+      method: 'POST',
+      headers: {
+        'User-Agent': UA,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`respondio HTTP ${res.status}`);
+    const parsed = (await res.json()) as ApiEnvelope<T>;
+    if (parsed.estado !== 1) throw new Error(parsed.mensaje);
+    return parsed.datos;
   });
-  if (!res.ok) throw new Error(`${path} respondio HTTP ${res.status}`);
-  const parsed = (await res.json()) as ApiEnvelope<T>;
-  if (parsed.estado !== 1) throw new Error(`${path}: ${parsed.mensaje}`);
-  return parsed.datos;
 }
 
 /** Cuerpo que espera articulos/pagina para listar una categoria completa.
@@ -233,33 +260,41 @@ export class CoopeAdapter implements ChainAdapter {
     const enLaHoja = new Set<string>();
     let declarados = Number.POSITIVE_INFINITY;
 
-    // Un orden alcanza para la mayoria de las hojas; el barrido completo solo
-    // se paga en las que cortan la paginacion temprano.
-    for (const orden of ORDENES) {
-      let pagina = 0;
+    // La categoria entera va en un try: si no responde ni con los reintentos,
+    // se anota y el recorrido sigue con la siguiente. Perder una gondola es
+    // molesto; perder el resto del catalogo por esa gondola no tiene sentido.
+    try {
+      // Un orden alcanza para la mayoria de las hojas; el barrido completo solo
+      // se paga en las que cortan la paginacion temprano.
+      for (const orden of ORDENES) {
+        let pagina = 0;
 
-      while (pagina < MAX_PAGINAS) {
-        const datos = await this.pedirPagina(cat.id_categoria, pagina, orden);
-        declarados = datos.cantidad_articulos;
-        const lote = datos.articulos ?? [];
-        if (lote.length === 0) break;
-        pagina++;
+        while (pagina < MAX_PAGINAS) {
+          const datos = await this.pedirPagina(cat.id_categoria, pagina, orden);
+          declarados = datos.cantidad_articulos;
+          const lote = datos.articulos ?? [];
+          if (lote.length === 0) break;
+          pagina++;
 
-        for (const a of lote) {
-          enLaHoja.add(a.cod_interno);
-          if (ctx.emitidos >= ctx.limit) return;
-          if (ctx.vistos.has(a.cod_interno)) continue; // cae en varias ramas
-          ctx.vistos.add(a.cod_interno);
+          for (const a of lote) {
+            enLaHoja.add(a.cod_interno);
+            if (ctx.emitidos >= ctx.limit) return;
+            if (ctx.vistos.has(a.cod_interno)) continue; // cae en varias ramas
+            ctx.vistos.add(a.cod_interno);
 
-          const producto = toSourceProduct(a, ctx.categories, this.web);
-          if (producto === null) continue;
+            const producto = toSourceProduct(a, ctx.categories, this.web);
+            if (producto === null) continue;
 
-          yield producto;
-          ctx.emitidos++;
+            yield producto;
+            ctx.emitidos++;
+          }
         }
-      }
 
-      if (enLaHoja.size >= declarados) break;
+        if (enLaHoja.size >= declarados) break;
+      }
+    } catch (err) {
+      console.warn(`  ! "${cat.descripcion}" quedo afuera: ${String(err).slice(0, 110)}`);
+      return;
     }
 
     if (enLaHoja.size < declarados) {

@@ -1,10 +1,49 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import {
   db, stores, categories, products, productSources, prices, currentPrices,
-  scrapeRuns, rawScrapeItems, productMedia,
+  scrapeRuns, rawScrapeItems, productMedia, eanConflictos,
 } from '@precios/db';
 import type { SourceProduct } from './adapters/types.js';
 import { toNormalizedName, toSlugSegment } from './normalize.js';
+
+interface Dueno {
+  id: string;
+  name: string;
+}
+
+/** Si ese codigo de barras ya es de OTRO producto, devuelve cual. */
+async function duenoDelEan(ean13: string | null, salvo: string): Promise<Dueno | undefined> {
+  if (!ean13) return undefined;
+  const [otro] = await db.select({ id: products.id, name: products.name })
+    .from(products)
+    .where(and(eq(products.ean13, ean13), ne(products.id, salvo)));
+  return otro;
+}
+
+/** Deja constancia del choque para poder revisarlo despues.
+ *
+ *  Cuenta las veces en vez de agregar una fila por corrida: un choque aislado
+ *  puede ser un error de un dia, pero si se repite todos los dias es que la
+ *  cadena lo tiene mal cargado de verdad. */
+async function anotarConflicto(
+  sp: SourceProduct,
+  ctx: { productId: string; ajeno: Dueno; chain: string },
+): Promise<void> {
+  await db.insert(eanConflictos)
+    .values({
+      ean13: sp.ean13!,
+      productId: ctx.productId,
+      chain: ctx.chain,
+      externalId: sp.externalId,
+      poseedorProductId: ctx.ajeno.id,
+      nombreNuevo: sp.name,
+      nombrePoseedor: ctx.ajeno.name,
+    })
+    .onConflictDoUpdate({
+      target: [eanConflictos.ean13, eanConflictos.productId],
+      set: { veces: sql`${eanConflictos.veces} + 1`, vistoEn: new Date() },
+    });
+}
 
 export async function ensureStore(chain: string, name: string): Promise<string> {
   const slug = `${chain}-online`;
@@ -95,7 +134,22 @@ export async function persistProduct(
 
   if (source) {
     productId = source.productId;
-    await db.update(products).set(campos).where(eq(products.id, productId));
+
+    // El EAN que manda la cadena puede pertenecer ya a otro producto nuestro:
+    // pasa cuando una de ellas lo tiene mal cargado. Escribirlo violaria la
+    // restriccion de unicidad y tiraria abajo el scrapeo entero, asi que nos
+    // quedamos con el que ya teniamos y anotamos el choque para revisarlo.
+    const ajeno = await duenoDelEan(sp.ean13, productId);
+    if (ajeno) {
+      await anotarConflicto(sp, { productId, ajeno, chain: ctx.chain });
+      // Sin la columna, explicito: que se omita no puede depender de como
+      // trate el ORM un undefined. Todo lo demas —nombre, precio, categoria—
+      // se actualiza igual; lo unico que se ignora es el codigo dudoso.
+      const { ean13: _dudoso, ...sinEan } = campos;
+      await db.update(products).set(sinEan).where(eq(products.id, productId));
+    } else {
+      await db.update(products).set(campos).where(eq(products.id, productId));
+    }
   } else {
     // 2. Si la fuente trae EAN, puede ser un producto que ya tenemos por otra cadena.
     const yaExiste = sp.ean13

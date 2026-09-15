@@ -50,6 +50,13 @@
       "when": 1789284531031,
       "tag": "0006_media_unica",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789441680925,
+      "tag": "0007_ean_conflictos",
+      "breakpoints": true
     }
   ]
 }
